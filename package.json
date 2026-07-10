@@ -1,0 +1,18 @@
+{
+  "name": "bms-seat-alert",
+  "version": "1.0.0",
+  "description": "BookMyShow seat availability alerting system via Telegram bot",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "keywords": ["bookmyshow", "telegram", "seat-alert", "playwright"],
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "node-telegram-bot-api": "^0.66.0",
+    "playwright": "^1.52.0",
+    "winston": "^3.17.0"
+  }
+}
