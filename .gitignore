@@ -9,9 +9,6 @@ jspm_packages/
 .env.test.local
 .env.production.local
 
-# Local state / database
-monitors.json
-
 # Local screenshots and logs
 error_screenshots/
 *.log
