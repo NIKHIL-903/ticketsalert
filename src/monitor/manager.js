@@ -22,6 +22,7 @@ class MonitorManager {
         url: m.url,
         category: m.category,
         rows: m.rows,
+        allRows: m.allRows || false,
         seatRange: m.seatRange,
         pollingInterval: m.pollingInterval,
       }));
@@ -65,6 +66,7 @@ class MonitorManager {
             url: conf.url,
             category: conf.category,
             rows: conf.rows,
+            allRows: conf.allRows || false,
             seatRange: conf.seatRange,
             pollingInterval: conf.pollingInterval,
             onAlert: (alertData) => {
@@ -141,7 +143,7 @@ class MonitorManager {
    * @param {function} config.onError
    * @returns {Promise<string>} The monitor ID
    */
-   async createMonitor({ name, url, category, rows, seatRange, pollingInterval, onAlert, onError }) {
+   async createMonitor({ name, url, category, rows, allRows, seatRange, pollingInterval, onAlert, onError }) {
     const id = `MON-${this.nextId++}`;
 
     const monitor = new Monitor({
@@ -150,6 +152,7 @@ class MonitorManager {
       url,
       category,
       rows,
+      allRows,
       seatRange,
       pollingInterval,
       onAlert,

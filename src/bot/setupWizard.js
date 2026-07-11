@@ -8,6 +8,69 @@ const logger = require('../logger');
 // Wizard states per chat
 const wizardStates = new Map(); // chatId -> state
 
+// Helper to parse row selection input (supports numbers, letters, ranges like M-P, 1-3, and comma-separated combinations)
+function parseRowSelection(input, available) {
+  const selectedIndices = new Set();
+  const getLetter = (r) => (r.label.split('Row ').pop() || r.label).trim().toUpperCase();
+  const parts = input.split(',').map(p => p.trim());
+
+  for (const part of parts) {
+    if (!part) continue;
+
+    const rangeMatch = part.match(/^([a-z0-9\s.]+)[-–]([a-z0-9\s.]+)$/i);
+    if (rangeMatch) {
+      const startStr = rangeMatch[1].trim().toUpperCase();
+      const endStr = rangeMatch[2].trim().toUpperCase();
+
+      const startNum = parseInt(startStr, 10);
+      const endNum = parseInt(endStr, 10);
+
+      if (!isNaN(startNum) && !isNaN(endNum)) {
+        if (startNum < 1 || startNum > available.length || endNum < 1 || endNum > available.length) {
+          return null;
+        }
+        const min = Math.min(startNum, endNum);
+        const max = Math.max(startNum, endNum);
+        for (let i = min; i <= max; i++) {
+          selectedIndices.add(i - 1);
+        }
+      } else {
+        const startIndex = available.findIndex(r => getLetter(r) === startStr || r.label.toUpperCase().includes(startStr));
+        const endIndex = available.findIndex(r => getLetter(r) === endStr || r.label.toUpperCase().includes(endStr));
+
+        if (startIndex === -1 || endIndex === -1) {
+          return null;
+        }
+
+        const min = Math.min(startIndex, endIndex);
+        const max = Math.max(startIndex, endIndex);
+        for (let i = min; i <= max; i++) {
+          selectedIndices.add(i);
+        }
+      }
+    } else {
+      const num = parseInt(part, 10);
+      if (!isNaN(num)) {
+        if (num < 1 || num > available.length) {
+          return null;
+        }
+        selectedIndices.add(num - 1);
+      } else {
+        const itemStr = part.toUpperCase();
+        const idx = available.findIndex(r => getLetter(r) === itemStr || r.label.toUpperCase().includes(itemStr));
+        if (idx === -1) {
+          return null;
+        }
+        selectedIndices.add(idx);
+      }
+    }
+  }
+
+  if (selectedIndices.size === 0) return null;
+  const sortedIndices = [...selectedIndices].sort((a, b) => a - b);
+  return sortedIndices.map(idx => available[idx]);
+}
+
 // Wizard step constants
 const STEPS = {
   AWAITING_NAME: 'AWAITING_NAME',
@@ -187,6 +250,7 @@ async function handleIntervalValueInput(bot, chatId, text, state) {
     url: state.data.url,
     category: state.data.selectedCategory,
     rows: state.data.selectedRows,
+    allRows: state.data.allRows || false,
     seatRange: state.data.seatRange,
     pollingInterval: state.data.pollingInterval,
     onAlert: (alertData) => {
@@ -330,20 +394,18 @@ async function handleRowSelection(bot, chatId, text, state) {
 
   if (input === 'all') {
     selectedRows = [...available];
+    state.data.allRows = true;
   } else {
-    const nums = input.split(',').map((s) => parseInt(s.trim(), 10));
-    const invalid = nums.some((n) => isNaN(n) || n < 1 || n > available.length);
-
-    if (invalid) {
+    selectedRows = parseRowSelection(text, available);
+    if (!selectedRows) {
       bot.sendMessage(
         chatId,
-        msg.invalidInput(`Enter valid numbers between 1 and ${available.length}, comma-separated.`),
+        msg.invalidInput(`Enter valid numbers, letters, ranges (e.g. M-P, 1-3), or "all".`),
         { parse_mode: 'MarkdownV2' }
       );
       return;
     }
-
-    selectedRows = nums.map((n) => available[n - 1]);
+    state.data.allRows = false;
   }
 
   state.data.selectedRows = selectedRows;
@@ -446,22 +508,22 @@ async function handleUpdateRows(bot, chatId, text, state) {
   const input = text.trim().toLowerCase();
   const available = state.data.availableRows;
   let selectedRows;
+  let allRows = false;
 
   if (input === 'all') {
     selectedRows = [...available];
+    allRows = true;
   } else {
-    const nums = input.split(',').map((s) => parseInt(s.trim(), 10));
-    const invalid = nums.some((n) => isNaN(n) || n < 1 || n > available.length);
-    if (invalid) {
-      bot.sendMessage(chatId, msg.invalidInput(`Enter numbers 1-${available.length}.`), {
+    selectedRows = parseRowSelection(text, available);
+    if (!selectedRows) {
+      bot.sendMessage(chatId, msg.invalidInput(`Enter valid numbers, letters, ranges (e.g. M-P, 1-3), or "all".`), {
         parse_mode: 'MarkdownV2',
       });
       return;
     }
-    selectedRows = nums.map((n) => available[n - 1]);
   }
 
-  monitorManager.updateMonitor(state.data.monitorId, { rows: selectedRows });
+  monitorManager.updateMonitor(state.data.monitorId, { rows: selectedRows, allRows });
 
   // Cleanup temp page
   if (state.data.tempPage) {

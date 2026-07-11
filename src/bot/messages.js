@@ -40,7 +40,7 @@ function showRows(rows) {
   rows.forEach((row, i) => {
     msg += `*${i + 1}\\.* ${escapeMarkdown(row.label)}\n`;
   });
-  msg += `\nReply with numbers \\(comma\\-separated\\) or *all*\nExample: \`1,2,3\` or \`all\``;
+  msg += `\nReply with numbers \\(comma\\-separated\\), letters, a range \\(e\\.g\\. M\\-P or 1\\-3\\), or *all*\nExample: \`1,2,3\`, \`M\\-P\`, or \`all\``;
   return msg;
 }
 
@@ -174,6 +174,7 @@ function errorAlert(monitorId, name, errorMsg) {
     `_Monitor will keep retrying\\. Use /stop ${escapeMarkdown(monitorId)} to stop it\\._`
   );
 }
+
 
 function notFound(id) {
   return `❌ Monitor *${escapeMarkdown(id)}* not found\\. Use /list to see active monitors\\.`;

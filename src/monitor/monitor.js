@@ -14,12 +14,13 @@ class Monitor {
    * @param {function} config.onAlert - Callback when new seats are found
    * @param {function} config.onError - Callback on persistent errors
    */
-   constructor({ id, name, url, category, rows, seatRange, pollingInterval, onAlert, onError, isResumed = false }) {
+   constructor({ id, name, url, category, rows, allRows, seatRange, pollingInterval, onAlert, onError, isResumed = false }) {
     this.id = id;
     this.name = name || id;
     this.url = url;
     this.category = category;
     this.rows = rows;
+    this.allRows = allRows || false;
     this.seatRange = seatRange;
     this.pollingInterval = pollingInterval;
     this.onAlert = onAlert;
@@ -68,13 +69,14 @@ class Monitor {
    * Update monitor preferences without stopping.
    * Clears previous state to avoid false alerts.
    */
-  updatePreferences({ rows, seatRange, pollingInterval }) {
+  updatePreferences({ rows, allRows, seatRange, pollingInterval }) {
     if (rows !== undefined) this.rows = rows;
+    if (allRows !== undefined) this.allRows = allRows;
     if (seatRange !== undefined) this.seatRange = seatRange;
     if (pollingInterval !== undefined) this.pollingInterval = pollingInterval;
 
-    // Reset state when rows/range change to avoid false alerts
-    if (rows !== undefined || seatRange !== undefined) {
+    // Reset state when rows/range/allRows change to avoid false alerts
+    if (rows !== undefined || seatRange !== undefined || allRows !== undefined) {
       this.previousState.clear();
       logger.info(`[${this.id}] Preferences updated, state reset`);
     } else {
@@ -121,16 +123,27 @@ class Monitor {
       this.page = page;
 
       // Scrape seats for all monitored rows
-      const seatData = await pollSeats(
+      // When allRows=true, pollSeats dynamically discovers rows from the dropdown
+      const { seats: seatData, unavailableRows, scannedRows } = await pollSeats(
         page,
         this.url,
         this.category.value,
-        this.rows
+        this.rows,
+        this.allRows
       );
+
+      // Use scannedRows for iteration (dynamic rows when allRows=true, fixed list otherwise)
+      const rowsToProcess = this.allRows ? scannedRows : this.rows;
+
+      // ── Log unavailable rows (only relevant when allRows=false) ──
+      if (unavailableRows.length > 0) {
+        const soldOutLabels = unavailableRows.map(r => r.label);
+        logger.info(`[${this.id}] Rows not in dropdown this cycle (unavailable): ${soldOutLabels.join(', ')}`);
+      }
 
       const alerts = [];
 
-      for (const row of this.rows) {
+      for (const row of rowsToProcess) {
         const seats = seatData.get(row.value) || [];
 
         // Filter by seat range

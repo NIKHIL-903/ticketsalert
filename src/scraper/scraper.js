@@ -243,13 +243,36 @@ async function getRowsForCategory(page, categoryValue) {
 }
 
 /**
+ * Read the list of rows currently available in the row dropdown.
+ * Rows that are fully sold out are removed from this dropdown by BMS.
+ *
+ * @param {import('playwright').Page} page
+ * @returns {Promise<Set<string>>} Set of row values present in the dropdown
+ */
+async function getAvailableRowValues(page) {
+  const rowValues = await page.$$eval(
+    `${SELECTORS.ROW_SELECT} option`,
+    (options) => options.map((opt) => opt.value).filter((v) => v !== '')
+  );
+  return new Set(rowValues);
+}
+
+/**
  * Select a row and read the seat statuses from the table.
+ * Returns null if the row doesn't exist in the dropdown (fully sold out).
  *
  * @param {import('playwright').Page} page
  * @param {string} rowValue - The value attribute of the row option (e.g. "GOLD.-P")
- * @returns {Promise<Array<{number: string, status: string}>>}
+ * @param {Set<string>} availableRowValues - Set of row values present in the dropdown
+ * @returns {Promise<Array<{number: string, status: string}> | null>} null if row is unavailable
  */
-async function getSeatsForRow(page, rowValue) {
+async function getSeatsForRow(page, rowValue, availableRowValues) {
+  // If the row is not in the dropdown, it's fully sold out
+  if (availableRowValues && !availableRowValues.has(rowValue)) {
+    logger.info(`Row ${rowValue}: not present in dropdown (fully sold out / unavailable)`);
+    return null;
+  }
+
   await humanSelectOption(page, SELECTORS.ROW_SELECT, rowValue);
 
   // Wait for the seat table with this specific row's data
@@ -312,30 +335,78 @@ async function discoverLayout(page, url) {
 }
 
 /**
- * Poll scan: navigate to URL, open modal, select category, read seats for specific rows.
+ * Read the full list of row objects currently in the row dropdown.
+ * Used when allRows=true to dynamically discover rows each poll cycle.
+ *
+ * @param {import('playwright').Page} page
+ * @returns {Promise<Array<{value: string, label: string}>>}
+ */
+async function getCurrentRows(page) {
+  const rows = await page.$$eval(
+    `${SELECTORS.ROW_SELECT} option`,
+    (options) =>
+      options
+        .filter((opt) => opt.value !== '')
+        .map((opt) => ({ value: opt.value, label: opt.textContent.trim() }))
+  );
+  return rows;
+}
+
+/**
+ * Poll scan: navigate to URL, open modal, select category, read seats for rows.
  * Used during monitoring poll cycles.
+ *
+ * When allRows=true, rows are discovered dynamically from the dropdown each cycle
+ * (so new rows added by BMS are automatically picked up).
+ * When allRows=false, only the specific rows in the `rows` array are checked.
  *
  * @param {import('playwright').Page} page
  * @param {string} url
  * @param {string} categoryValue
- * @param {Array<{value: string, label: string}>} rows - Rows to scan
- * @returns {Promise<Map<string, Array<{number: string, status: string}>>>} - Map of rowValue -> seats
+ * @param {Array<{value: string, label: string}>} rows - Rows to scan (used when allRows=false)
+ * @param {boolean} [allRows=false] - If true, dynamically discover rows from dropdown
+ * @returns {Promise<{seats: Map, unavailableRows: Array, scannedRows: Array}>}
  */
-async function pollSeats(page, url, categoryValue, rows) {
+async function pollSeats(page, url, categoryValue, rows, allRows = false) {
   await openModalAndSetup(page, url);
 
   // Select the category
   await humanSelectOption(page, SELECTORS.CATEGORY_SELECT, categoryValue);
 
-  const result = new Map();
+  // Determine which rows to scan
+  let rowsToScan;
+  if (allRows) {
+    // Dynamically read all rows currently in the dropdown
+    rowsToScan = await getCurrentRows(page);
+    logger.info(`Dynamic row discovery (allRows): found ${rowsToScan.length} row(s): [${rowsToScan.map(r => r.value).join(', ')}]`);
+  } else {
+    rowsToScan = rows;
+  }
 
-  for (const row of rows) {
-    const seats = await getSeatsForRow(page, row.value);
-    result.set(row.value, seats);
+  // Read which rows are actually present in the dropdown (for fixed-list checks)
+  const availableRowValues = allRows
+    ? new Set(rowsToScan.map(r => r.value))
+    : await getAvailableRowValues(page);
+
+  if (!allRows) {
+    logger.info(`Dropdown has ${availableRowValues.size} row(s): [${[...availableRowValues].join(', ')}]`);
+  }
+
+  const result = new Map();
+  const unavailableRows = [];
+
+  for (const row of rowsToScan) {
+    const seats = await getSeatsForRow(page, row.value, availableRowValues);
+    if (seats === null) {
+      unavailableRows.push(row);
+      result.set(row.value, []);
+    } else {
+      result.set(row.value, seats);
+    }
   }
 
   await closeModal(page);
-  return result;
+  return { seats: result, unavailableRows, scannedRows: rowsToScan };
 }
 
 module.exports = {
@@ -343,6 +414,8 @@ module.exports = {
   getCategories,
   getRowsForCategory,
   getSeatsForRow,
+  getAvailableRowValues,
+  getCurrentRows,
   closeModal,
   discoverLayout,
   pollSeats,

@@ -1,16 +1,12 @@
 [
   {
     "id": "MON-1",
-    "name": "odyessey dolby",
+    "name": "Odyessey Dolby",
     "url": "https://in.bookmyshow.com/movies/HYD/seat-layout/ET00504055/ALUC/2846/20260718",
     "category": {
       "value": "0004",
       "label": "GOLD. - ₹295.00",
       "rows": [
-        {
-          "value": "GOLD.-N",
-          "label": "GOLD. Row N"
-        },
         {
           "value": "GOLD.-P",
           "label": "GOLD. Row P"
@@ -31,10 +27,6 @@
     },
     "rows": [
       {
-        "value": "GOLD.-N",
-        "label": "GOLD. Row N"
-      },
-      {
         "value": "GOLD.-P",
         "label": "GOLD. Row P"
       },
@@ -51,6 +43,7 @@
         "label": "GOLD. Row S"
       }
     ],
+    "allRows": true,
     "seatRange": null,
     "pollingInterval": 180
   }
