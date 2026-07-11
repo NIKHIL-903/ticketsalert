@@ -2,11 +2,17 @@ const { chromium } = require('playwright');
 const logger = require('../logger');
 
 let browser = null;
+let idleTimer = null;
 
 /**
  * Launch a shared Playwright browser instance with stealth-like settings.
  */
 async function launchBrowser() {
+  if (idleTimer) {
+    clearTimeout(idleTimer);
+    idleTimer = null;
+  }
+
   if (browser && browser.isConnected()) {
     return browser;
   }
@@ -71,6 +77,10 @@ async function createPage() {
     }
   });
 
+  context.on('close', () => {
+    closeBrowserIfIdle();
+  });
+
   // Remove webdriver flag to avoid detection
   await context.addInitScript(() => {
     Object.defineProperty(navigator, 'webdriver', { get: () => false });
@@ -96,4 +106,25 @@ async function closeBrowser() {
   }
 }
 
-module.exports = { launchBrowser, createPage, closeBrowser };
+/**
+ * Automatically close the shared browser if there are no active contexts left,
+ * using a short debounce to handle rapid sequential/overlapping calls.
+ */
+async function closeBrowserIfIdle() {
+  if (idleTimer) {
+    clearTimeout(idleTimer);
+  }
+
+  idleTimer = setTimeout(async () => {
+    idleTimer = null;
+    if (browser && browser.isConnected()) {
+      const contexts = browser.contexts();
+      if (contexts.length === 0) {
+        logger.info('No active pages/contexts, closing shared browser to save resources.');
+        await closeBrowser();
+      }
+    }
+  }, 5000); // 5 seconds debounce
+}
+
+module.exports = { launchBrowser, createPage, closeBrowser, closeBrowserIfIdle };

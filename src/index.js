@@ -1,3 +1,28 @@
+// Prevent cmd/console windows from popping up on Windows when Playwright launches browsers
+if (process.platform === 'win32') {
+  const child_process = require('child_process');
+  
+  const originalSpawn = child_process.spawn;
+  child_process.spawn = function (command, args, options) {
+    if (options) {
+      options.windowsHide = true;
+    } else {
+      options = { windowsHide: true };
+    }
+    return originalSpawn.call(this, command, args, options);
+  };
+
+  const originalSpawnSync = child_process.spawnSync;
+  child_process.spawnSync = function (command, args, options) {
+    if (options) {
+      options.windowsHide = true;
+    } else {
+      options = { windowsHide: true };
+    }
+    return originalSpawnSync.call(this, command, args, options);
+  };
+}
+
 const config = require('./config');
 const { launchBrowser, closeBrowser } = require('./scraper/browser');
 const { startBot, stopBot } = require('./bot/bot');
